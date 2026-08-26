@@ -176,9 +176,9 @@ body{
 
 #warehouse-grid{
     display:grid;
-    grid-template-columns:30px repeat(3,90px);
-    grid-auto-rows:90px;
-    gap:10px;
+    grid-template-columns:30px repeat(10, 52px);
+    grid-auto-rows:52px;
+    gap:8px;
     justify-content:center;
     align-items:center;
 }
@@ -199,8 +199,8 @@ body{
 }
 
 .slot{
-    width:90px;
-    height:90px;
+    width:52px;
+    height:52px;
     border-radius:10px;
     background:var(--empty);
     cursor:pointer;
@@ -435,14 +435,14 @@ body{
     }
 
     #warehouse-grid{
-        grid-template-columns:25px repeat(3,70px);
-        grid-auto-rows:70px;
-        gap:7px;
+        grid-template-columns:22px repeat(10, 28px);
+        grid-auto-rows:28px;
+        gap:6px;
     }
 
     .slot{
-        width:70px;
-        height:70px;
+        width:28px;
+        height:28px;
         border-radius:8px;
     }
 
@@ -475,7 +475,7 @@ body{
                 </h1>
 
                 <span id="header-subtitle">
-                    Planta baixa · 3 × 3 · 9 slots
+                    Planta baixa · 10 × 10 · 100 slots
                 </span>
 
             </div>
@@ -662,6 +662,43 @@ body{
             </div>
 
 
+            <!-- AÇÕES -->
+
+            <div class="panel-card">
+                <div class="panel-title" id="title-actions">AÇÕES DO ARMAZÉM</div>
+
+                <div id="warehouse-actions" style="display:grid; gap:10px;">
+                    <label style="display:grid; gap:6px; font-size:11px; color:#666b73;">
+                        RFID
+                        <input id="rfid-input" type="text" maxlength="20" placeholder="Ex.: RFID-001" style="padding:10px 12px; border:1px solid #dfe3ea; border-radius:10px; font-size:13px; background:#f9fafb;">
+                    </label>
+
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                        <label style="display:grid; gap:6px; font-size:11px; color:#666b73;">
+                            Linha
+                            <input id="row-input" type="number" min="1" max="10" placeholder="1" style="padding:10px 12px; border:1px solid #dfe3ea; border-radius:10px; font-size:13px; background:#f9fafb;">
+                        </label>
+
+                        <label style="display:grid; gap:6px; font-size:11px; color:#666b73;">
+                            Coluna
+                            <input id="column-input" type="number" min="1" max="10" placeholder="1" style="padding:10px 12px; border:1px solid #dfe3ea; border-radius:10px; font-size:13px; background:#f9fafb;">
+                        </label>
+                    </div>
+
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                        <button id="btn-input" type="button" style="padding:10px 12px; border:none; border-radius:10px; background:#22a35a; color:white; font-weight:700; cursor:pointer;">Registrar entrada</button>
+                        <button id="btn-output" type="button" style="padding:10px 12px; border:none; border-radius:10px; background:#e05252; color:white; font-weight:700; cursor:pointer;">Registrar saída</button>
+                    </div>
+
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                        <button id="btn-move" type="button" style="padding:10px 12px; border:none; border-radius:10px; background:#4a8fe7; color:white; font-weight:700; cursor:pointer;">Mover caixa</button>
+                        <button id="btn-delete" type="button" style="padding:10px 12px; border:none; border-radius:10px; background:#8a8f98; color:white; font-weight:700; cursor:pointer;">Excluir caixa</button>
+                    </div>
+
+                    <div id="action-message" style="min-height:18px; font-size:11px; color:#4a8fe7; font-weight:600;"></div>
+                </div>
+            </div>
+
             <!-- LOG -->
 
             <div class="panel-card">
@@ -700,393 +737,260 @@ body{
 
 <script>
 
-/* =========================
-   CONFIGURAÇÃO DA GRID
-========================= */
+const API_BASE_URL = "http://127.0.0.1:8000/api/v1/warehouse";
+const GRID_ROWS = 10;
+const GRID_COLS = 10;
 
-const COLS = 3;
+const gridEl = document.getElementById("warehouse-grid");
+const logList = document.getElementById("log-list");
+const alertsList = document.getElementById("alerts-list");
+const statusText = document.getElementById("status-text");
+const statusDot = document.getElementById("status-dot");
+const rfidInput = document.getElementById("rfid-input");
+const rowInput = document.getElementById("row-input");
+const columnInput = document.getElementById("column-input");
+const actionMessage = document.getElementById("action-message");
 
-const ROWS = [
-    "A",
-    "B",
-    "C"
-];
+let warehouseBoxes = [];
 
-
-/*
-0 = livre
-1 = ocupado
-2 = ocupado
-3 = alerta
-*/
-
-const layout = {
-
-    A: [1, 0, 2],
-
-    B: [0, 2, 0],
-
-    C: [1, 1, 2]
-
-};
-
-
-const statusClass = [
-    "livre",
-    "ocupado-1",
-    "ocupado-2",
-    "alerta"
-];
-
-
-const gridEl =
-    document.getElementById("warehouse-grid");
-
-
-/* =========================
-   CABEÇALHO DAS COLUNAS
-========================= */
-
-for(let c = 1; c <= COLS; c++){
-
-    const div =
-        document.createElement("div");
-
-    div.className =
-        "col-header";
-
-    div.id =
-        "col-header-" + c;
-
-    div.textContent =
-        String(c).padStart(2,"0");
-
-    gridEl.appendChild(div);
-
+function setStatus(isOnline) {
+    statusText.textContent = isOnline ? "Online" : "Offline";
+    statusDot.style.background = isOnline ? "#22a35a" : "#e05252";
+    statusText.parentElement.style.color = isOnline ? "#22a35a" : "#e05252";
 }
 
+function setActionMessage(message, isError = false) {
+    actionMessage.textContent = message;
+    actionMessage.style.color = isError ? "#e05252" : "#4a8fe7";
+}
 
-/* =========================
-   CRIAÇÃO DOS SLOTS
-========================= */
+async function apiRequest(url, options = {}) {
+    const response = await fetch(url, {
+        headers: {
+            Accept: "application/json",
+            ...(options.headers || {})
+        },
+        ...options
+    });
 
-ROWS.forEach(rowLetter => {
+    if (!response.ok) {
+        let payload = {};
 
-    const rowLabel =
-        document.createElement("div");
+        try {
+            payload = await response.json();
+        } catch (error) {
+            payload = {};
+        }
 
-    rowLabel.className =
-        "row-label";
+        throw new Error(payload.detail || `Erro HTTP ${response.status}`);
+    }
 
-    rowLabel.id =
-        "row-label-" + rowLetter;
+    const contentType = response.headers.get("content-type") || "";
+    if (contentType.includes("application/json")) {
+        return response.json();
+    }
 
-    rowLabel.textContent =
-        rowLetter;
+    if (response.status === 204) {
+        return null;
+    }
 
-    gridEl.appendChild(rowLabel);
+    return null;
+}
 
+function normalizeTag(tag) {
+    return String(tag || "").trim();
+}
 
-    for(let c = 1; c <= COLS; c++){
+function buildGridHeaders() {
+    gridEl.innerHTML = "";
 
-        const cellId =
-            rowLetter + c;
+    const corner = document.createElement("div");
+    corner.className = "corner-header";
+    gridEl.appendChild(corner);
 
-        const div =
-            document.createElement("div");
+    for (let c = 1; c <= GRID_COLS; c++) {
+        const header = document.createElement("div");
+        header.className = "col-header";
+        header.id = "col-header-" + c;
+        header.textContent = String(c).padStart(2, "0");
+        gridEl.appendChild(header);
+    }
+}
 
-        const state =
-            layout[rowLetter][c - 1];
+function renderGrid(boxes) {
+    warehouseBoxes = boxes || [];
+    buildGridHeaders();
 
+    const occupiedMap = new Map();
+    warehouseBoxes.forEach(box => {
+        const row = Number(box.row);
+        const column = Number(box.column);
 
-        div.className =
-            "slot " + statusClass[state];
+        if (!Number.isNaN(row) && !Number.isNaN(column)) {
+            occupiedMap.set(`${row}-${column}`, box);
+        }
+    });
 
-        div.id =
-            cellId;
+    for (let row = 0; row < GRID_ROWS; row++) {
+        const rowLabel = document.createElement("div");
+        rowLabel.className = "row-label";
+        rowLabel.id = "row-label-" + (row + 1);
+        rowLabel.textContent = String.fromCharCode(65 + row);
+        gridEl.appendChild(rowLabel);
 
-        div.dataset.state =
-            state;
+        for (let column = 0; column < GRID_COLS; column++) {
+            const box = occupiedMap.get(`${row}-${column}`);
+            const cell = document.createElement("div");
+            const isOccupied = Boolean(box);
 
-        div.title =
-            "Slot " + cellId;
+            cell.className = "slot " + (isOccupied ? "ocupado-2" : "livre");
+            cell.id = `${String.fromCharCode(65 + row)}${column + 1}`;
+            cell.dataset.state = isOccupied ? "2" : "0";
+            cell.title = isOccupied
+                ? `RFID: ${box.tag_rfid} | Linha ${row + 1} | Coluna ${column + 1}`
+                : `Slot ${String.fromCharCode(65 + row)}${column + 1}`;
 
+            if (isOccupied) {
+                cell.setAttribute("aria-label", `Slot ocupado com RFID ${box.tag_rfid}`);
+            }
 
-        /* ALTERAR ESTADO AO CLICAR */
+            cell.addEventListener("click", () => {
+                if (box) {
+                    rfidInput.value = box.tag_rfid;
+                    rowInput.value = Number(box.row) + 1;
+                    columnInput.value = Number(box.column) + 1;
+                    setActionMessage(`Caixa selecionada: ${box.tag_rfid}`);
+                    return;
+                }
 
-        div.addEventListener("click", () => {
+                rowInput.value = row + 1;
+                columnInput.value = column + 1;
+                setActionMessage(`Slot livre selecionado: ${String.fromCharCode(65 + row)}${column + 1}`);
+            });
 
-            let s =
-                parseInt(
-                    div.dataset.state,
-                    10
-                );
+            gridEl.appendChild(cell);
+        }
+    }
+}
 
-            s =
-                (s + 1) %
-                statusClass.length;
+function renderStats(totalBoxes, occupancyPercentage, audit) {
+    document.getElementById("stat-estoque-atual").textContent = totalBoxes;
+    document.getElementById("stat-ocupacao").textContent = `${Math.round(occupancyPercentage)}%`;
 
+    const today = new Date();
+    const todayISO = today.toISOString().slice(0, 10);
 
-            div.className =
-                "slot " +
-                statusClass[s];
+    const entradasHoje = (audit || []).filter(item => {
+        const itemDate = new Date(item.timestamp);
+        return item.status === "INPUT" && !Number.isNaN(itemDate.getTime()) && itemDate.toISOString().slice(0, 10) === todayISO;
+    }).length;
 
-            div.dataset.state =
-                s;
+    const saidasHoje = (audit || []).filter(item => {
+        const itemDate = new Date(item.timestamp);
+        return item.status === "OUTPUT" && !Number.isNaN(itemDate.getTime()) && itemDate.toISOString().slice(0, 10) === todayISO;
+    }).length;
 
+    document.getElementById("stat-entradas-hoje").textContent = entradasHoje;
+    document.getElementById("stat-saidas-hoje").textContent = saidasHoje;
+}
+
+function renderLog(audit) {
+    logList.innerHTML = "";
+
+    const recentEntries = (audit || []).slice(0, 8);
+
+    if (!recentEntries.length) {
+        const empty = document.createElement("div");
+        empty.className = "log-row";
+        empty.textContent = "Nenhuma movimentação registrada.";
+        logList.appendChild(empty);
+        return;
+    }
+
+    recentEntries.forEach(entry => {
+        const row = document.createElement("div");
+        row.className = "log-row";
+
+        const data = document.createElement("span");
+        data.className = "log-datahora";
+        data.textContent = entry.timestamp ? new Date(entry.timestamp).toLocaleString("pt-BR") : "Sem data";
+
+        const tipo = document.createElement("span");
+        tipo.className = entry.status === "INPUT" ? "log-tipo-entrada" : "log-tipo-saida";
+        tipo.textContent = entry.status === "INPUT" ? "ENTRADA" : "SAÍDA";
+
+        const caixa = document.createElement("span");
+        caixa.className = "log-caixa";
+        caixa.textContent = entry.tag_rfid;
+
+        const status = document.createElement("span");
+        status.className = "log-status-ok";
+        status.textContent = "OK";
+
+        row.appendChild(data);
+        row.appendChild(tipo);
+        row.appendChild(caixa);
+        row.appendChild(status);
+
+        logList.appendChild(row);
+    });
+}
+
+function renderAlerts(totalBoxes, occupancyPercentage) {
+    alertsList.innerHTML = "";
+
+    const alerts = [];
+
+    if (occupancyPercentage >= 80) {
+        alerts.push({
+            level: "warning",
+            title: "Armazém em alta ocupação",
+            desc: `Ocupação atual em ${Math.round(occupancyPercentage)}%. Avaliar redistribuição.`
         });
-
-
-        gridEl.appendChild(div);
-
     }
 
-});
-
-
-/* =========================
-   LOG DE CONFERÊNCIA
-========================= */
-
-const logEntries = [
-
-    {
-        id:1,
-        data:"12/08/2026 14:39:20",
-        tipo:"ENTRADA",
-        caixa:"100391",
-        status:"OK"
-    },
-
-    {
-        id:2,
-        data:"12/08/2026 14:33:20",
-        tipo:"ENTRADA",
-        caixa:"100497",
-        status:"OK"
-    },
-
-    {
-        id:3,
-        data:"12/08/2026 14:31:20",
-        tipo:"ENTRADA",
-        caixa:"100143",
-        status:"OK"
-    },
-
-    {
-        id:4,
-        data:"12/08/2026 14:25:20",
-        tipo:"SAÍDA",
-        caixa:"100477",
-        status:"OK"
-    },
-
-    {
-        id:5,
-        data:"12/08/2026 14:23:20",
-        tipo:"ENTRADA",
-        caixa:"100282",
-        status:"OK"
-    },
-
-    {
-        id:6,
-        data:"12/08/2026 14:18:20",
-        tipo:"SAÍDA",
-        caixa:"100269",
-        status:"OK"
-    },
-
-    {
-        id:7,
-        data:"12/08/2026 14:14:20",
-        tipo:"SAÍDA",
-        caixa:"100445",
-        status:"OK"
-    },
-
-    {
-        id:8,
-        data:"12/08/2026 14:09:20",
-        tipo:"ENTRADA",
-        caixa:"100359",
-        status:"OK"
+    if (occupancyPercentage <= 15) {
+        alerts.push({
+            level: "info",
+            title: "Estoque baixo",
+            desc: `Ocupação atual em ${Math.round(occupancyPercentage)}%. Reposição recomendada.`
+        });
     }
 
-];
-
-
-const logList =
-    document.getElementById("log-list");
-
-
-logEntries.forEach(entry => {
-
-    const row =
-        document.createElement("div");
-
-    row.className =
-        "log-row";
-
-    row.id =
-        "log-row-" + entry.id;
-
-
-    const data =
-        document.createElement("span");
-
-    data.className =
-        "log-datahora";
-
-    data.textContent =
-        entry.data;
-
-
-    const tipo =
-        document.createElement("span");
-
-    tipo.className =
-        entry.tipo === "ENTRADA"
-        ? "log-tipo-entrada"
-        : "log-tipo-saida";
-
-    tipo.textContent =
-        entry.tipo;
-
-
-    const caixa =
-        document.createElement("span");
-
-    caixa.className =
-        "log-caixa";
-
-    caixa.textContent =
-        entry.caixa;
-
-
-    const status =
-        document.createElement("span");
-
-    status.className =
-        "log-status-ok";
-
-    status.textContent =
-        entry.status;
-
-
-    row.appendChild(data);
-    row.appendChild(tipo);
-    row.appendChild(caixa);
-    row.appendChild(status);
-
-    logList.appendChild(row);
-
-});
-
-
-/* =========================
-   ALERTAS
-========================= */
-
-const alerts = [
-
-    {
-        id:1,
-        level:"critical",
-        title:"Slot C3 em alerta",
-        desc:"Divergência de contagem detectada — conferência manual necessária."
-    },
-
-    {
-        id:2,
-        level:"warning",
-        title:"Estoque baixo — Corredor C",
-        desc:"Ocupação abaixo de 15% na fileira C. Reposição recomendada."
-    },
-
-    {
-        id:3,
-        level:"warning",
-        title:"Estoque alto — Corredor A",
-        desc:"Ocupação acima de 80% na fileira A. Avaliar redistribuição."
-    },
-
-    {
-        id:4,
-        level:"info",
-        title:"Saída acima da média",
-        desc:"37 caixas expedidas hoje, 18% acima da média das últimas 4 semanas."
+    if (totalBoxes === 0) {
+        alerts.push({
+            level: "info",
+            title: "Armazém vazio",
+            desc: "Nenhuma caixa registrada no momento."
+        });
     }
 
-];
+    if (!alerts.length) {
+        const empty = document.createElement("div");
+        empty.id = "alerts-empty";
+        empty.textContent = "Nenhum alerta ativo no momento.";
+        alertsList.appendChild(empty);
+        return;
+    }
 
+    alerts.forEach((alert, index) => {
+        const row = document.createElement("div");
+        row.className = "alert-row";
+        row.id = "alert-row-" + index;
 
-const alertsList =
-    document.getElementById("alerts-list");
+        const icon = document.createElement("span");
+        icon.className = "alert-icon level-" + alert.level;
 
+        const body = document.createElement("div");
+        body.className = "alert-body";
 
-if(alerts.length === 0){
+        const title = document.createElement("span");
+        title.className = "alert-title";
+        title.textContent = alert.title;
 
-    const empty =
-        document.createElement("div");
-
-    empty.id =
-        "alerts-empty";
-
-    empty.textContent =
-        "Nenhum alerta ativo no momento.";
-
-    alertsList.appendChild(empty);
-
-}else{
-
-    alerts.forEach(a => {
-
-        const row =
-            document.createElement("div");
-
-        row.className =
-            "alert-row";
-
-        row.id =
-            "alert-row-" + a.id;
-
-
-        const icon =
-            document.createElement("span");
-
-        icon.className =
-            "alert-icon level-" +
-            a.level;
-
-
-        const body =
-            document.createElement("div");
-
-        body.className =
-            "alert-body";
-
-
-        const title =
-            document.createElement("span");
-
-        title.className =
-            "alert-title";
-
-        title.textContent =
-            a.title;
-
-
-        const desc =
-            document.createElement("span");
-
-        desc.className =
-            "alert-desc";
-
-        desc.textContent =
-            a.desc;
-
+        const desc = document.createElement("span");
+        desc.className = "alert-desc";
+        desc.textContent = alert.desc;
 
         body.appendChild(title);
         body.appendChild(desc);
@@ -1095,10 +999,146 @@ if(alerts.length === 0){
         row.appendChild(body);
 
         alertsList.appendChild(row);
-
     });
-
 }
+
+async function loadWarehouseData() {
+    try {
+        const [boxes, countResponse, occupancyResponse, auditResponse] = await Promise.all([
+            apiRequest(`${API_BASE_URL}/`),
+            apiRequest(`${API_BASE_URL}/count`),
+            apiRequest(`${API_BASE_URL}/occupancy`),
+            apiRequest(`${API_BASE_URL}/audit`)
+        ]);
+
+        const totalBoxes = Number(countResponse.total_boxes ?? boxes.length ?? 0);
+        const occupancy = Number(occupancyResponse.occupancy_percentage ?? 0);
+
+        renderGrid(boxes);
+        renderStats(totalBoxes, occupancy, auditResponse);
+        renderLog(auditResponse);
+        renderAlerts(totalBoxes, occupancy);
+        setStatus(true);
+    } catch (error) {
+        setStatus(false);
+        renderGrid([]);
+        document.getElementById("stat-estoque-atual").textContent = "0";
+        document.getElementById("stat-entradas-hoje").textContent = "0";
+        document.getElementById("stat-saidas-hoje").textContent = "0";
+        document.getElementById("stat-ocupacao").textContent = "0%";
+
+        logList.innerHTML = "";
+        const empty = document.createElement("div");
+        empty.className = "log-row";
+        empty.textContent = "Falha ao conectar com a API.";
+        logList.appendChild(empty);
+
+        alertsList.innerHTML = "";
+        const alert = document.createElement("div");
+        alert.className = "alert-row";
+        alert.innerHTML = '<span class="alert-icon level-critical"></span><div class="alert-body"><span class="alert-title">API indisponível</span><span class="alert-desc">Verifique se o backend está em execução e se o CORS está habilitado.</span></div>';
+        alertsList.appendChild(alert);
+    }
+}
+
+async function handleRegisterInput() {
+    const tag = normalizeTag(rfidInput.value);
+    if (!tag) {
+        setActionMessage("Informe o RFID da caixa antes de registrar a entrada.", true);
+        return;
+    }
+
+    try {
+        const result = await apiRequest(`${API_BASE_URL}/box/input/${encodeURIComponent(tag)}`, { method: "POST" });
+        setActionMessage(`Entrada registrada com sucesso: ${tag}`);
+        if (result && result.tag_rfid) {
+            rfidInput.value = result.tag_rfid;
+            rowInput.value = Number(result.row) + 1;
+            columnInput.value = Number(result.column) + 1;
+        }
+        await loadWarehouseData();
+    } catch (error) {
+        setActionMessage(error.message || "Erro ao registrar entrada.", true);
+    }
+}
+
+async function handleRegisterOutput() {
+    const tag = normalizeTag(rfidInput.value);
+    if (!tag) {
+        setActionMessage("Informe o RFID da caixa antes de registrar a saída.", true);
+        return;
+    }
+
+    try {
+        await apiRequest(`${API_BASE_URL}/box/output/${encodeURIComponent(tag)}`, { method: "POST" });
+        setActionMessage(`Saída registrada com sucesso: ${tag}`);
+        rfidInput.value = "";
+        rowInput.value = "";
+        columnInput.value = "";
+        await loadWarehouseData();
+    } catch (error) {
+        setActionMessage(error.message || "Erro ao registrar saída.", true);
+    }
+}
+
+async function handleMoveBox() {
+    const tag = normalizeTag(rfidInput.value);
+    const row = Number(rowInput.value);
+    const column = Number(columnInput.value);
+
+    if (!tag) {
+        setActionMessage("Informe o RFID da caixa para mover.", true);
+        return;
+    }
+
+    if (!Number.isInteger(row) || !Number.isInteger(column) || row < 1 || column < 1 || row > GRID_ROWS || column > GRID_COLS) {
+        setActionMessage("Informe uma linha e coluna válidas de 1 a 10.", true);
+        return;
+    }
+
+    try {
+        await apiRequest(`${API_BASE_URL}/${encodeURIComponent(tag)}/position?row=${row - 1}&column=${column - 1}`, { method: "PATCH" });
+        setActionMessage(`Posição atualizada para a caixa ${tag}`);
+        await loadWarehouseData();
+    } catch (error) {
+        setActionMessage(error.message || "Erro ao mover a caixa.", true);
+    }
+}
+
+async function handleDeleteBox() {
+    const tag = normalizeTag(rfidInput.value);
+    if (!tag) {
+        setActionMessage("Informe o RFID da caixa para excluir.", true);
+        return;
+    }
+
+    const confirmed = window.confirm(`Deseja excluir permanentemente a caixa ${tag}?`);
+    if (!confirmed) {
+        return;
+    }
+
+    try {
+        await apiRequest(`${API_BASE_URL}/${encodeURIComponent(tag)}`, { method: "DELETE" });
+        setActionMessage(`Caixa removida com sucesso: ${tag}`);
+        rfidInput.value = "";
+        rowInput.value = "";
+        columnInput.value = "";
+        await loadWarehouseData();
+    } catch (error) {
+        setActionMessage(error.message || "Erro ao excluir a caixa.", true);
+    }
+}
+
+document.getElementById("btn-input").addEventListener("click", handleRegisterInput);
+document.getElementById("btn-output").addEventListener("click", handleRegisterOutput);
+document.getElementById("btn-move").addEventListener("click", handleMoveBox);
+document.getElementById("btn-delete").addEventListener("click", handleDeleteBox);
+
+buildGridHeaders();
+renderGrid([]);
+setStatus(false);
+loadWarehouseData();
+setInterval(loadWarehouseData, 20000);
 
 </script>
 
